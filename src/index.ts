@@ -29,10 +29,11 @@ class FileOrganizerSettings {
   useAutoAppend = false;
   defaultServerUrl = "https://app.fileorganizer2000.com";
   customServerUrl = "https://file-organizer-2000.vercel.app/";
-  useCustomServer = false;
+  useCustomServer = false; // for self-hosted setup
   useSimilarTagsInFrontmatter = false;
-  enableEarlyAccess = false;
+  enableEarlyAccess = false; // default value is false
   earlyAccessCode = "";
+  enableAIAssistant = false; // default value is false
 }
 
 const validAudioExtensions = ["mp3", "wav", "webm", "m4a"];
@@ -413,8 +414,7 @@ export default class FileOrganizer extends Plugin {
 
     // Get the most similar folder based on the content and file name
     const mostSimilarFolder = await useText(
-      `Given the text content "${content}" (and if the file name "${
-        file.basename
+      `Given the text content "${content}" (and if the file name "${file.basename
       }"), which of the following folders would be the most appropriate location for the file? Available folders: ${uniqueFolders.join(
         ", "
       )}`,

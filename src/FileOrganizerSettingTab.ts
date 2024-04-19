@@ -177,7 +177,7 @@ export class FileOrganizerSettingTab extends PluginSettingTab {
           .setPlaceholder("Enter access code for Early Access Features")
           .setValue(this.plugin.settings.earlyAccessCode)
           .onChange(async (value) => {
-                       if (value.length !== 8) {
+            if (value.length !== 8) {
               return;
             }
             const jsonPayload = {
@@ -211,22 +211,38 @@ export class FileOrganizerSettingTab extends PluginSettingTab {
           })
       );
 
+    let aiAssistantToggle;
+
     new Setting(containerEl)
       .setName("Use Self-hosted")
       .setDesc("Toggle to use a custom server instead of the default.")
-      .addToggle((toggle) =>
+      .addToggle((toggle) => {
         toggle
           .setValue(this.plugin.settings.useCustomServer)
           .onChange(async (value) => {
             this.plugin.settings.useCustomServer = value;
             await this.plugin.saveSettings();
+
             if (!value) {
+              logMessage("Disabling early access features");
+              this.plugin.settings.enableEarlyAccess = false;
               customServerSetting.settingEl.hide();
+
+              aiAssistantToggle.setDisabled(true); // Disable AI Assistant toggle when custom server is disabled
+              aiAssistantToggle.setValue(false); // Turn off AI Assistant toggle when custom server is disabled
+
               return;
             }
+
+            logMessage("Enabling early access features on custom server");
+            this.plugin.settings.enableEarlyAccess = true;
             customServerSetting.settingEl.show();
-          })
-      );
+            aiAssistantToggle.setDisabled(false); // Enable AI Assistant toggle when custom server is enabled
+            await this.plugin.saveSettings(); // Save settings after enabling early access features
+          });
+      });
+
+
 
     const customServerSetting = new Setting(containerEl)
       .setName("Self-hosted URL")
@@ -263,12 +279,36 @@ export class FileOrganizerSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+    // Function to initialize the AI Assistant toggle
+    const initAIAssistantToggle = () => {
+      new Setting(containerEl)
+        .setName("AI Assistant (available in early access)")
+        .setDesc("A sidebar that gives you more control in your file management.")
+        .addToggle((toggle) => {
+          aiAssistantToggle = toggle; // Store the toggle instance in the aiAssistantToggle variable
 
-    new Setting(containerEl)
-      .setName("AI Assistant (available in early access)")
-      .setDesc("A sidebar that gives you more control in your file management.")
-      .addToggle((toggle) => toggle.setDisabled(true));
+          toggle
+            .setValue(this.plugin.settings.enableEarlyAccess)
+            .onChange(async (newValue) => { // Wrap the onChange callback function in an async function
+              this.plugin.settings.enableEarlyAccess = newValue;
+              await this.plugin.saveSettings(); // Save settings when AI Assistant toggle is changed
+            });
 
+          // Disable AI Assistant toggle based if early access or custom server is not enabled
+          if (!this.plugin.settings.useCustomServer || !this.plugin.settings.enableEarlyAccess) {
+            toggle.setValue(false);
+            toggle.setDisabled(true);
+          }
+        });
+    };
+    initAIAssistantToggle();
+
+    // Initially disable AI Assistant setting if custom server and early access are not enabled
+    if (!this.plugin.settings.useCustomServer && !this.plugin.settings.enableEarlyAccess) {
+      aiAssistantToggle.setDisabled(true);
+    } else {
+      aiAssistantToggle.setDisabled(false); // Enable AI Assistant toggle when custom server is enabled on load
+    }
     new Setting(containerEl)
       .setName("Experimental: Describe workflow (in progress)")
       .setDesc(
