@@ -11,6 +11,7 @@ import {
   RequestUrlResponsePromise,
   RequestUrlParam,
   RequestUrlResponse,
+  EventRef,
 } from "obsidian";
 import { logMessage, formatToSafeName } from "../utils";
 import { FileOrganizerSettingTab } from "./FileOrganizerSettingTab";
@@ -38,9 +39,11 @@ import {
   identifyConceptsRouter,
   transcribeAudioRouter,
 } from "./aiServiceRouter";
-import { json } from "stream/consumers";
-import { identifyConceptsAndFetchChunks } from "../app/aiService";
-import { openai } from "@ai-sdk/openai";
+import { requestUrl } from "obsidian";
+import { generateObject } from "ai";
+import { z } from "zod";
+import Forcaster from "./forcaster";
+// import { streamText, openai } from "vercel";
 
 type TagCounts = {
   [key: string]: number;
@@ -181,6 +184,8 @@ export interface FileMetadata {
 
 export default class FileOrganizer extends Plugin {
   settings: FileOrganizerSettings;
+  screenDataInterval: NodeJS.Timeout | null = null;
+  forcaster: Forcaster | null = null;
 
   // all files in inbox will go through this function
   async processFileV2(originalFile: TFile, oldPath?: string): Promise<void> {
@@ -196,10 +201,12 @@ export default class FileOrganizer extends Plugin {
 
       await this.checkAndCreateFolders();
 
+      console.log("processFileV2before");
       const text = await this.getTextFromFile(originalFile);
+      console.log("processFileV2", text);
       // we trim text to 128k tokens before passing it to the model
       // const trimmedText = await this.trimContentToTokenLimit(text, 128 * 1000);
-      const instructions = await this.generateInstructions(originalFile, text);
+      const instructions = await this.generateInstructions(originalFile);
       const metadata = await this.generateMetadata(
         originalFile,
         instructions,
@@ -328,9 +335,7 @@ export default class FileOrganizer extends Plugin {
       const mediaFile = fileBeingProcessed;
 
       // Add the annotation text to the markdown file
-      if (metadata.instructions.shouldAnnotate) {
-        await this.app.vault.modify(fileToOrganize, text);
-      }
+      await this.app.vault.modify(fileToOrganize, text);
 
       // New log for successful image annotation
       if (validImageExtensions.includes(mediaFile.extension)) {
@@ -791,6 +796,97 @@ export default class FileOrganizer extends Plugin {
       fileContent.slice(8, 12).toString("hex") === "57454250"
     );
   }
+  async unload() {
+    if (this.screenDataInterval) {
+      clearInterval(this.screenDataInterval);
+    }
+    this.app.workspace.detachLeavesOfType(ASSISTANT_VIEW_TYPE);
+  }
+
+  scheduleScreenDataProcessing(intervalInSeconds: number) {
+    // return;
+    logMessage("scheduleScreenDataProcessing");
+    this.screenDataInterval = setInterval(() => {
+      logMessage("interval");
+      this.processScreenData().catch(console.error);
+    }, intervalInSeconds * 1000);
+  }
+
+  async fetchScreenData(): Promise<{
+    data: { type: string; content: any }[];
+    pagination: { limit: number; offset: number; total: number };
+  }> {
+    const currentTime = new Date();
+    const startDate = encodeURIComponent(
+      new Date(currentTime.getTime() - 5000).toISOString().slice(0, 19)
+    );
+    const endDate = encodeURIComponent(currentTime.toISOString().slice(0, 19)); // current time
+
+    // const response = await fetch(
+    //   // `http://localhost:3030/recent?limit=5&offset=0&start_date=${startDate}&end_date=${endDate}`,
+    //   // curl "http://localhost:3030/recent?limit=3"
+    //   `http://localhost:3030/recent?limit=5`,
+    //   {
+    //     method: "GET",
+    //     headers: {
+    //       "Content-Type": "application/json",
+    //     },
+    //   }
+    // );
+    // const response = await fetch(`http://localhost:8080`);
+    const response = await requestUrl("http://localhost:8080/query");
+    return response.text;
+
+    // if (response.ok) {
+    // const text = await response.text();
+    // } else {
+    // throw new Error(`Error fetching screen data: ${await response.text()}`);
+    // }
+  }
+
+  async processScreenData() {
+    try {
+      const screenData = await this.fetchScreenData();
+      // if (!screenData || !screenData.data || screenData.data.length === 0) {
+      //   console.log("No screen data found");
+      //   return;
+      // }
+      // console.log("screenData", screenData);
+      // const screenText = screenData.data
+      //   .map((frame: any) => frame.content.text)
+      //   .join("\n");
+
+      const screenText = screenData;
+      console.log("screenText", screenText);
+      const model = getModelFromTask("format");
+
+      const { object } = await generateObject({
+        model: model,
+        schema: z.object({
+          diaryEntry: z.string(),
+        }),
+        // system: "if not about gnsois pay do nothing",
+        prompt:
+          "i'm creaeting a presentation about war structure in markdown so that it can be interpretted by obsdidian presentation" +
+          screenText,
+      });
+      console.log("object", object);
+
+      const diaryEntry = object.diaryEntry;
+      await this.createDiaryEntry(diaryEntry);
+    } catch (error) {
+      console.error("Error processing screen data:", error);
+    }
+  }
+
+  async createDiaryEntry(content: string) {
+    const diaryFolderPath = "Diary";
+    await this.ensureFolderExists(diaryFolderPath);
+
+    const fileName = `diary_${Date.now()}.md`;
+    const filePath = `${diaryFolderPath}/${fileName}`;
+    await this.app.vault.create(filePath, content);
+  }
 
   // main.ts
   async generateImageAnnotation(file: TFile, customPrompt?: string) {
@@ -1064,12 +1160,18 @@ export default class FileOrganizer extends Plugin {
     await this.initializePlugin();
 
     this.initalizeModels();
+    this.scheduleScreenDataProcessing(10); // every 60 seconds
+
+    this.forcaster = new Forcaster(this);
+    await this.forcaster.onload();
+
+    // ... existing code ...
 
     // configureTask("audio", "whisper-1");
 
-    this.addRibbonIcon("sparkle", "Fo2k Assistant View", () => {
-      this.showAssistantSidebar();
-    });
+    // this.addRibbonIcon("sparkle", "Fo2k Assistant View", () => {
+    //   this.showAssistantSidebar();
+    // });
 
     // on layout ready register event handlers
     this.addCommand({
@@ -1135,10 +1237,15 @@ export default class FileOrganizer extends Plugin {
     await this.loadSettings();
     await this.checkAndCreateFolders();
     this.addSettingTab(new FileOrganizerSettingTab(this.app, this));
-    this.registerView(
-      ASSISTANT_VIEW_TYPE,
-      (leaf: WorkspaceLeaf) => new AssistantViewWrapper(leaf, this)
-    );
+    // Only register the view if it hasn't been registered already
+    
+    // if (!this.app.workspace.getActiveViewOfType(AssistantViewWrapper)) {
+    //   this.registerView(
+    //     ASSISTANT_VIEW_TYPE,
+    //     (leaf: WorkspaceLeaf) => new AssistantViewWrapper(leaf, this)
+    //   );
+    // }
+
   }
 
   async appendTranscriptToActiveFile(

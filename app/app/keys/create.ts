@@ -21,26 +21,11 @@ export async function create() {
   const unkey = new Unkey({ token });
 
   // Check if the user is a paid user
-  const user = await clerkClient.users.getUser(userId);
-
-  const isPaidUser =
-    (user?.publicMetadata as CustomJwtSessionClaims["publicMetadata"])?.stripe
-      ?.status === "complete";
-
-  const refillAmount = isPaidUser ? 2000 : 500;
-
-  console.log("creating with refill amount", refillAmount);
-  await createOrUpdateUserUsage(userId, refillAmount, "monthly");
 
   const key = await unkey.keys.create({
     name: name,
     ownerId: userId,
     apiId,
-    remaining: refillAmount,
-    refill: {
-      interval: "monthly",
-      amount: refillAmount,
-    },
   });
   return { key: key.result };
 }

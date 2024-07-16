@@ -1,12 +1,8 @@
 import {
-  GenerateObjectResult,
   LanguageModel,
   generateObject,
-  generateText,
-  streamObject,
 } from "ai";
 import { z } from "zod";
-import { NextResponse } from "next/server";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
 import { tmpdir } from "os";
@@ -168,42 +164,33 @@ export async function extractTextFromImage(
   model: LanguageModel
 ): Promise<string> {
   const modelName = model.modelId;
+  //encode iamge to base64
+  const base64Image = Buffer.from(image).toString("base64");
 
-  const messages = [
-    {
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: "Extract text from image. Write in markdown. If there's a drawing, describe it. Respond with only the extracted text or description, no other text.",
-        },
-        {
-          type: "image",
-          image: image,
-        },
-      ],
-    },
-  ];
+  const requestBody = {
+    model: "moondream",
+    prompt: "Extract text from image. Write in markdown. If there's a drawing, describe it. Respond with only the extracted text or description, no other text.",
+    images: [base64Image],
+  };
 
-  switch (modelName) {
-    case "gpt-4o": {
-      const response = await generateText({
-        model,
-        //@ts-ignore
-        messages,
-      });
+  try {
+    const response = await requestUrl({
+      url: "https://your-api-endpoint.com/extract-text", // Replace with your actual API endpoint
+      method: "POST",
+      contentType: "application/json",
+      body: JSON.stringify(requestBody),
+      throw: false,
+    });
 
-      return response.text.trim();
+    if (response.status !== 200) {
+      throw new Error(`API request failed with status ${response.status}`);
     }
-    default: {
-      const defaultResponse = await generateText({
-        model,
-        //@ts-ignore
-        messages,
-      });
 
-      return defaultResponse.text.trim();
-    }
+    const result = await response.json;
+    return result.text.trim();
+  } catch (error) {
+    console.error("Error extracting text from image:", error);
+    throw error;
   }
 }
 
