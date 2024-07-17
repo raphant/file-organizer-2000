@@ -12,6 +12,7 @@ import {
   RequestUrlParam,
   RequestUrlResponse,
   EventRef,
+  Modal,
 } from "obsidian";
 import { logMessage, formatToSafeName } from "../utils";
 import { FileOrganizerSettingTab } from "./FileOrganizerSettingTab";
@@ -108,6 +109,8 @@ class FileOrganizerSettings {
       provider: "openai" | "ollama" | "anthropic";
     };
   } = {};
+
+  currentResearchTopic = "";
 }
 
 const validImageExtensions = ["png", "jpg", "jpeg", "gif", "svg", "webp"];
@@ -847,45 +850,67 @@ export default class FileOrganizer extends Plugin {
   async processScreenData() {
     try {
       const screenData = await this.fetchScreenData();
-      // if (!screenData || !screenData.data || screenData.data.length === 0) {
-      //   console.log("No screen data found");
-      //   return;
-      // }
-      // console.log("screenData", screenData);
-      // const screenText = screenData.data
-      //   .map((frame: any) => frame.content.text)
-      //   .join("\n");
-
       const screenText = screenData;
       console.log("screenText", screenText);
       const model = getModelFromTask("format");
 
+      const researchTopic = this.settings.currentResearchTopic;
+      if (!researchTopic) {
+        console.log("No research topic set");
+        return;
+      }
+
       const { object } = await generateObject({
         model: model,
         schema: z.object({
-          diaryEntry: z.string(),
+          relevantContent: z.string(),
         }),
-        // system: "if not about gnsois pay do nothing",
-        prompt:
-          "i'm creaeting a presentation about war structure in markdown so that it can be interpretted by obsdidian presentation" +
-          screenText,
+        prompt: `Research topic: "${researchTopic}"\n\nAnalyze the following screen content and extract any relevant information:\n${screenText}`,
       });
-      console.log("object", object);
 
-      const diaryEntry = object.diaryEntry;
-      await this.createDiaryEntry(diaryEntry);
+      console.log("Relevant content:", object.relevantContent);
+
+      if (object.relevantContent) {
+        await this.appendToResearchFile(object.relevantContent);
+      }
     } catch (error) {
       console.error("Error processing screen data:", error);
     }
   }
 
-  async createDiaryEntry(content: string) {
-    const diaryFolderPath = "Diary";
-    await this.ensureFolderExists(diaryFolderPath);
+  async appendToResearchFile(content: string) {
+    const researchFilePath = "Research/current_research.md";
+    await this.ensureFolderExists("Research");
 
-    const fileName = `diary_${Date.now()}.md`;
-    const filePath = `${diaryFolderPath}/${fileName}`;
-    await this.app.vault.create(filePath, content);
+    let fileContent = "";
+    if (await this.app.vault.adapter.exists(researchFilePath)) {
+      const file = this.app.vault.getAbstractFileByPath(researchFilePath);
+      if (file instanceof TFile) {
+        fileContent = await this.app.vault.read(file);
+      }
+    }
+
+    const timestamp = moment().format("YYYY-MM-DD HH:mm:ss");
+    const newContent = `${fileContent}\n\n## ${timestamp}\n\n${content}`;
+
+    await this.app.vault.adapter.write(researchFilePath, newContent);
+  }
+
+  async startResearch(topic: string) {
+    this.settings.currentResearchTopic = topic;
+    await this.saveSettings();
+    this.scheduleScreenDataProcessing(10); // Process every minute
+    new Notice(`Research started on: ${topic}`);
+  }
+
+  async stopResearch() {
+    this.settings.currentResearchTopic = "";
+    await this.saveSettings();
+    if (this.screenDataInterval) {
+      clearInterval(this.screenDataInterval);
+      this.screenDataInterval = null;
+    }
+    new Notice("Research stopped");
   }
 
   // main.ts
@@ -1217,6 +1242,21 @@ export default class FileOrganizer extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "start-research",
+      name: "Start Research",
+      callback: () => {
+        new ResearchTopicModal(this).open();
+      },
+    });
+    this.addCommand({
+      id: "stop-research",
+      name: "stop Research",
+      callback: () => {
+        this.stopResearch();
+      },
+    });
+
     console.log("FileOrganizer2000 loaded");
     console.log("Settings", this.settings);
     this.app.workspace.onLayoutReady(this.registerEventHandlers.bind(this));
@@ -1238,14 +1278,13 @@ export default class FileOrganizer extends Plugin {
     await this.checkAndCreateFolders();
     this.addSettingTab(new FileOrganizerSettingTab(this.app, this));
     // Only register the view if it hasn't been registered already
-    
+
     // if (!this.app.workspace.getActiveViewOfType(AssistantViewWrapper)) {
     //   this.registerView(
     //     ASSISTANT_VIEW_TYPE,
     //     (leaf: WorkspaceLeaf) => new AssistantViewWrapper(leaf, this)
     //   );
     // }
-
   }
 
   async appendTranscriptToActiveFile(
@@ -1279,5 +1318,36 @@ export default class FileOrganizer extends Plugin {
         }
       })
     );
+  }
+}
+class ResearchTopicModal extends Modal {
+  plugin: FileOrganizer;
+  result: string;
+
+  constructor(plugin: FileOrganizer) {
+    super(plugin.app);
+    this.plugin = plugin;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl("h2", { text: "Enter Research Topic" });
+    const inputEl = contentEl.createEl("input", { type: "text" });
+    const buttonEl = contentEl.createEl("button", { text: "Start Research" });
+
+    buttonEl.addEventListener("click", () => {
+      this.result = inputEl.value;
+      this.close();
+    });
+
+    inputEl.focus();
+  }
+
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+    if (this.result) {
+      this.plugin.startResearch(this.result);
+    }
   }
 }
