@@ -863,10 +863,15 @@ export default class FileOrganizer extends Plugin {
       const { object } = await generateObject({
         model: model,
         schema: z.object({
-          relevantContent: z.string(),
+          relevantContent: z.string().nullable(),
         }),
+        system: "if not relevant info return null",
         prompt: `Research topic: "${researchTopic}"\n\nAnalyze the following screen content and extract any relevant information:\n${screenText}`,
       });
+      if (!object.relevantContent) {
+        console.log("No relevant content found");
+        return;
+      }
 
       console.log("Relevant content:", object.relevantContent);
 
