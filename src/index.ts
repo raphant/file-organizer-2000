@@ -488,17 +488,35 @@ export default class FileOrganizer extends Plugin {
       );
 
       // Add link to RAW file at the end of the formatted content
-      const rawFileLink = `\n\n---\n[Link to original unformatted content](${rawFilePath})`;
+      const encodedRawFilePath = this.encodeObsidianPath(rawFilePath);
+      const rawFileLink = `\n\n---\n[Link to original content](${encodedRawFilePath})`;
       formattedContent += rawFileLink;
 
       // Update the file with the formatted content including the RAW file link
       await this.app.vault.modify(file, formattedContent);
+
+      // Get the TFile object for the RAW file
+      const rawFile = this.app.vault.getAbstractFileByPath(rawFilePath);
+      if (rawFile instanceof TFile) {
+        // Add link to formatted file in the RAW file
+        const encodedFormattedFilePath = this.encodeObsidianPath(file.path);
+        const formattedFileLink = `\n\n---\n[Link to formatted content](${encodedFormattedFilePath})`;
+        await this.app.vault.append(rawFile, formattedFileLink);
+      }
 
       new Notice("Content formatted successfully", 3000);
     } catch (error) {
       console.error("Error formatting content:", error);
       new Notice("An error occurred while formatting the content.", 6000);
     }
+  }
+
+  // Add this helper method to your class
+  private encodeObsidianPath(path: string): string {
+    return path
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
   }
 
   // create unique file name when RAW file name already exists
