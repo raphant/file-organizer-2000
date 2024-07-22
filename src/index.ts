@@ -457,13 +457,27 @@ export default class FileOrganizer extends Plugin {
   ): Promise<void> {
     try {
       new Notice("Formatting content...", 3000);
-      
+
+      // Create RAW folder if it doesn't exist
+      const rawFolderPath = `${this.settings.defaultDestinationPath}/RAW`;
+      await this.ensureFolderExists(rawFolderPath);
+
+      // Generate a unique filename for the RAW file
+      const rawFileName = await this.getUniqueFileName(
+        `${file.basename}_RAW`,
+        file.extension,
+        rawFolderPath
+      );
+      const rawFilePath = `${rawFolderPath}/${rawFileName}`;
+
+      // Copy the original file to the RAW folder
+      await this.app.vault.copy(file, rawFilePath);
+
       let formattedContent = "";
       const updateCallback = async (partialContent: string) => {
         formattedContent = partialContent;
-        await this.app.vault.modify(file, formattedContent);
       };
-  
+
       await this.formatStream(
         content,
         formattingInstruction,
@@ -472,12 +486,34 @@ export default class FileOrganizer extends Plugin {
         this.settings.API_KEY,
         updateCallback
       );
-  
+
+      // Add link to RAW file at the end of the formatted content
+      const rawFileLink = `\n\n---\n[Link to original unformatted content](${rawFilePath})`;
+      formattedContent += rawFileLink;
+
+      // Update the file with the formatted content including the RAW file link
+      await this.app.vault.modify(file, formattedContent);
+
       new Notice("Content formatted successfully", 3000);
     } catch (error) {
       console.error("Error formatting content:", error);
       new Notice("An error occurred while formatting the content.", 6000);
     }
+  }
+
+  // create unique file name when RAW file name already exists
+  async getUniqueFileName(
+    baseName: string,
+    extension: string,
+    folderPath: string
+  ): Promise<string> {
+    let fileName = `${baseName}.${extension}`;
+    let counter = 1;
+    while (await this.app.vault.adapter.exists(`${folderPath}/${fileName}`)) {
+      fileName = `${baseName}_${counter}.${extension}`;
+      counter++;
+    }
+    return fileName;
   }
   async createFileInInbox(content: string): Promise<void> {
     const fileName = `chunk_${Date.now()}.md`;
