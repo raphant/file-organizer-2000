@@ -9,6 +9,7 @@ import { verifyKey } from "@unkey/api";
 import morgan from "morgan";
 import { exec } from "child_process";
 import util from "util";
+import axios from 'axios';
 
 dotenv.config();
 
@@ -70,6 +71,9 @@ app.get("/", (req: Request, res: Response) => {
   res.status(200).send("Audio Transcription Server");
 });
 
+const USAGE_API_URL = process.env.USAGE_API_URL || 'http://localhost:3000/api/usage';
+const API_SECRET = process.env.API_SECRET || '';
+
 app.post(
   "/transcribe",
   upload.single("audio"),
@@ -127,10 +131,22 @@ app.post(
     console.log("file extension", fileExtension);
 
     try {
+      // Check user usage
+      const usageResponse = await axios.get(`${USAGE_API_URL}?userId=${result.ownerId}`, {
+        headers: { 'X-API-Secret': API_SECRET }
+      });
+      const usage = usageResponse.data;
+
+      if (usage.remaining <= 0) {
+        return res.status(403).json({ error: 'Usage limit exceeded' });
+      }
+
       const chunkDuration = 10 * 60;
       const audioInfo = await getAudioDuration(req.file.path);
       const totalDuration = audioInfo.duration;
       const chunks = Math.ceil(totalDuration / chunkDuration);
+
+      let totalMinutes = Math.ceil(totalDuration / 60);
 
       res.setHeader("Content-Type", "text/plain");
       res.setHeader("Transfer-Encoding", "chunked");
@@ -160,6 +176,14 @@ app.post(
         res.write(result.results?.channels[0]?.alternatives[0]?.transcript + " ");
         fs.unlinkSync(chunkPath);
       }
+
+      // Update usage
+      await axios.post(USAGE_API_URL, {
+        userId: result.ownerId,
+        minutes: totalMinutes
+      }, {
+        headers: { 'X-API-Secret': API_SECRET }
+      });
 
       fs.unlinkSync(req.file.path);
       res.end();
