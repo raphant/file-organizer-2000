@@ -146,7 +146,7 @@ app.post(
       const totalDuration = audioInfo.duration;
       const chunks = Math.ceil(totalDuration / chunkDuration);
 
-      let totalMinutes = Math.ceil(totalDuration / 60);
+      let totalSeconds = Math.ceil(totalDuration);
 
       res.setHeader("Content-Type", "text/plain");
       res.setHeader("Transfer-Encoding", "chunked");
@@ -180,7 +180,7 @@ app.post(
       // Update usage
       await axios.post(USAGE_API_URL, {
         userId: result.ownerId,
-        minutes: totalMinutes
+        seconds: totalSeconds
       }, {
         headers: { 'X-API-Secret': API_SECRET }
       });

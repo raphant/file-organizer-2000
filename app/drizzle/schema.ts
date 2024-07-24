@@ -31,8 +31,8 @@ export const UserUsageTable = pgTable(
       .default("inactive"),
     paymentStatus: text("paymentStatus").notNull().default("unpaid"),
     minutesUsed: integer("minutesUsed").notNull().default(0),
-    meetingMinutes: integer("meetingMinutes").notNull().default(0),
-    maxMeetingMinutes: integer("maxMeetingMinutes").notNull().default(60),
+    meetingSeconds: integer("meetingSeconds").notNull().default(0),
+    maxMeetingSeconds: integer("maxMeetingSeconds").notNull().default(3600),
   },
   (userUsage) => {
     return {
@@ -252,30 +252,30 @@ export async function updateUserSubscriptionStatus(
   }
 }
 
-export async function incrementMeetingMinutes(
+export async function incrementMeetingSeconds(
   userId: string,
-  minutes: number
+  seconds: number
 ): Promise<{ remaining: number; usageError: boolean }> {
-  console.log("Incrementing Meeting Minutes for User ID:", userId);
+  console.log("Incrementing Meeting Seconds for User ID:", userId);
 
   try {
     const userUsage = await db
       .update(UserUsageTable)
       .set({
-        meetingMinutes: sql`${UserUsageTable.meetingMinutes} + ${minutes}`,
+        meetingSeconds: sql`${UserUsageTable.meetingSeconds} + ${seconds}`,
       })
       .where(eq(UserUsageTable.userId, userId))
       .returning({
-        remaining: sql<number>`${UserUsageTable.maxMeetingMinutes} - ${UserUsageTable.meetingMinutes}`,
+        remaining: sql<number>`${UserUsageTable.maxMeetingSeconds} - ${UserUsageTable.meetingSeconds}`,
       });
 
-    console.log("Incremented Meeting Minutes for User ID:", userId, minutes);
+    console.log("Incremented Meeting Seconds for User ID:", userId, seconds);
     return {
       remaining: userUsage[0].remaining,
       usageError: false,
     };
   } catch (error) {
-    console.error("Error incrementing Meeting Minutes for User ID:", userId);
+    console.error("Error incrementing Meeting Seconds for User ID:", userId);
     console.error(error);
     return {
       remaining: 0,
@@ -284,8 +284,8 @@ export async function incrementMeetingMinutes(
   }
 }
 
-export const checkMeetingMinutes = async (userId: string) => {
-  console.log("Checking Meeting Minutes for User ID:", userId);
+export const checkMeetingSeconds = async (userId: string) => {
+  console.log("Checking Meeting Seconds for User ID:", userId);
   try {
     const userUsage = await db
       .select()
@@ -296,20 +296,20 @@ export const checkMeetingMinutes = async (userId: string) => {
 
     console.log("User Usage Results for User ID:", userId, userUsage);
 
-    if (userUsage[0].meetingMinutes >= userUsage[0].maxMeetingMinutes) {
-      console.log("User has exceeded their meeting minutes limit");
+    if (userUsage[0].meetingSeconds >= userUsage[0].maxMeetingSeconds) {
+      console.log("User has exceeded their meeting seconds limit");
       return {
         remaining: 0,
         usageError: false,
       };
     }
-    console.log("User has not exceeded their meeting minutes limit");
+    console.log("User has not exceeded their meeting seconds limit");
     return {
-      remaining: userUsage[0].maxMeetingMinutes - userUsage[0].meetingMinutes,
+      remaining: userUsage[0].maxMeetingSeconds - userUsage[0].meetingSeconds,
       usageError: false,
     };
   } catch (error) {
-    console.error("Error checking meeting minutes for User ID:", userId);
+    console.error("Error checking meeting seconds for User ID:", userId);
     console.error(error);
     return {
       remaining: 0,

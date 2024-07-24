@@ -640,8 +640,13 @@ export default class FileOrganizer extends Plugin {
     formData.append("audio", blob, `audio.${fileExtension}`);
     formData.append("fileExtension", fileExtension);
     // const newServerUrl = "http://localhost:3001/transcribe";
+    // production
+    // const newServerUrl =
+    //   "https://file-organizer-2000-production.up.railway.app/transcribe";
+    // // staging
     const newServerUrl =
-      "https://file-organizer-2000-production.up.railway.app/transcribe";
+      "https://file-organizer-2000-staging.up.railway.app/transcribe";
+
     const response = await fetch(newServerUrl, {
       method: "POST",
       body: formData,
