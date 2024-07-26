@@ -25,7 +25,7 @@ export const UserUsageTable = pgTable(
     tokenUsage: integer("tokenUsage").notNull().default(0),
     maxTokenUsage: integer("maxTokenUsage")
       .notNull()
-      .default(1000 * 1000),
+      .default(1000 * 5000),
     subscriptionStatus: text("subscriptionStatus")
       .notNull()
       .default("inactive"),
@@ -224,7 +224,7 @@ export async function updateUserSubscriptionStatus(
         maxUsage: 0,
         billingCycle: "",
         tokenUsage: 0,
-        maxTokenUsage: 1000 * 1000,
+        maxTokenUsage: 1000 * 5000,
         createdAt: new Date(),
       })
       .onConflictDoUpdate({
