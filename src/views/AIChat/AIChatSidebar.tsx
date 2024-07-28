@@ -3,6 +3,8 @@ import { useChat } from "ai/react";
 import ReactMarkdown from 'react-markdown';
 import FileOrganizer from "../..";
 import { logMessage } from "../../../utils";
+import { TFile, TFolder } from "obsidian";
+import Fuse from "fuse.js";
 
 export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (
   props
@@ -93,6 +95,57 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = ({ plugin }) => {
   const [fileContent, setFileContent] = useState<string>("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [key, setKey] = useState(0);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [inputValue, setInputValue] = useState(""); // New state for input value
+  const [autocompleteSuggestion, setAutocompleteSuggestion] = useState<string | null>(null);
+  const [fuse, setFuse] = useState<Fuse<string> | null>(null);
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setInputValue(prevValue => {
+      const parts = prevValue.split('@');
+      parts[parts.length - 1] = suggestion;
+      return parts.join('@') + ' ';
+    });
+    setShowSuggestions(false);
+  };
+
+  const { messages, input, handleInputChange, handleSubmit, completion } = useChat({
+    api: `${plugin.getServerUrl()}/api/chat`,
+    body: { fileContent, fileName },
+  });
+
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      if (autocompleteSuggestion) {
+        setInputValue(prevValue => prevValue + autocompleteSuggestion);
+        setAutocompleteSuggestion(null);
+      } else {
+        const suggestion = await completion(inputValue);
+        setAutocompleteSuggestion(suggestion);
+      }
+    }
+  };
+
+  const handleInputChangeWrapper = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
+    handleInputChange(e);
+    setAutocompleteSuggestion(null);
+
+    const lastAtIndex = value.lastIndexOf('@');
+    if (lastAtIndex !== -1 && lastAtIndex === value.length - 1) {
+      setShowSuggestions(true);
+      setSuggestions([]); // Clear suggestions when '@' is typed
+    } else if (showSuggestions && lastAtIndex !== -1 && fuse) {
+      const query = value.slice(lastAtIndex + 1);
+      const results = fuse.search(query);
+      setSuggestions(results.map(result => result.item).slice(0, 5));
+    } else {
+      setShowSuggestions(false);
+    }
+  };
 
   useEffect(() => {
     const loadFileContent = async () => {
@@ -119,6 +172,17 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = ({ plugin }) => {
     // Set up event listener for file changes
     const onFileOpen = plugin.app.workspace.on('file-open', loadFileContent);
 
+    // Set up fuzzy search
+    const files = plugin.app.vault.getFiles();
+    const folders = plugin.app.vault.getAllLoadedFiles().filter(f => f instanceof TFolder) as TFolder[];
+    const allItems = [...files, ...folders].map(item => item.path);
+    
+    const newFuse = new Fuse(allItems, {
+      threshold: 0.3,
+      distance: 100,
+    });
+    setFuse(newFuse);
+
     return () => {
       plugin.app.workspace.offref(onFileOpen);
     };
@@ -132,6 +196,26 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = ({ plugin }) => {
         fileContent={fileContent}
         fileName={fileName}
       />
+      <div className="input-wrapper">
+        <Input
+          value={inputValue}
+          onChange={handleInputChangeWrapper}
+          placeholder="Send a message. Use @ to autocomplete file names."
+        />
+      </div>
+      {showSuggestions && (
+        <div className="suggestions">
+          {suggestions.map((suggestion, index) => (
+            <div 
+              key={index} 
+              className="suggestion-item"
+              onClick={() => handleSuggestionClick(suggestion)}
+            >
+              {suggestion}
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 };
