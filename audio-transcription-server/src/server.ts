@@ -148,6 +148,9 @@ app.post(
           {
             model: "nova-2",
             smart_format: true,
+            detect_language: true,
+            // language supported: English, German, French, Spanish, Portuguese, Italian, Japanese, Chinese, Hindi, Arabic, Korean, Russian, Dutch, Multi (Spanish-English)
+            language: ["en", "de", "de-CH", "fr", "es", "pt", "it", "ja", "zh", "hi", "ar", "ko", "ru", "nl", "multi"],
           }
         );
 
@@ -156,8 +159,15 @@ app.post(
           throw new Error("Deepgram transcription failed");
         }
 
-        console.log(result.results?.channels[0]?.alternatives[0]?.transcript);
-        res.write(result.results?.channels[0]?.alternatives[0]?.transcript + " ");
+        if (result) {
+          console.log("Detected language:", result.results?.channels[0]?.detected_language);
+          console.log("Transcript:", result.results?.channels[0]?.alternatives[0]?.transcript);
+          res.write(result.results?.channels[0]?.alternatives[0]?.transcript + " ");
+        } else {
+          console.error("No result from Deepgram");
+          throw new Error("No result from Deepgram");
+        }
+
         fs.unlinkSync(chunkPath);
       }
 
