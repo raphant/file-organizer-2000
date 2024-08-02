@@ -2,6 +2,9 @@ name: Build Obsidian Plugin
 
 on: push
 
+env:
+  IS_SOLO_INSTANCE: ${{ secrets.SOLO_API_KEY != '' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,4 +21,9 @@ jobs:
         run: npm install
 
       - name: Build plugin
-        run: npm run build
+        run: |
+          if [ "$IS_SOLO_INSTANCE" = "true" ]; then
+            npm run build:self-host
+          else
+            npm run build
+          fi
