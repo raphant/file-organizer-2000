@@ -53,6 +53,7 @@ export async function createYearlySubscriptionCheckout() {
     userId,
     successUrl: `${origin}/dashboard/subscribers`,
     cancelUrl: `${origin}/dashboard`,
+    trialPeriodDays: 3, // Add trial period for annual plan
     allowPromotionCodes: true,
   });
 

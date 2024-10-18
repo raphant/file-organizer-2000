@@ -1,4 +1,4 @@
-import { PreSRMConfig } from "@u22n/srm";
+import { PreSRMConfig, taxCodes } from "@u22n/srm";
 
 const features = {
   support: "Support",
@@ -38,6 +38,8 @@ export const config = {
     HobbyMonthly: {
       name: "Hobby Monthly Plan",
       id: "subscription_monthly",
+      taxCode: taxCodes.SOFTWARE_AS_A_SERVICE,
+
       prices: {
         monthly: {
           // $15
@@ -58,6 +60,7 @@ export const config = {
     HobbyYearly: {
       name: "Hobby Yearly Plan",
       id: "subscription_yearly",
+      taxCode: taxCodes.SOFTWARE_AS_A_SERVICE,
       prices: {
         yearly: {
           // $99
@@ -81,6 +84,7 @@ export const config = {
     Lifetime: {
       name: "Lifetime Payment",
       id: "lifetime",
+      taxCode: taxCodes.DOWNLOADABLE_SOFTWARE_BUSINESS,
       prices: {
         lifetime: {
           // $250
